@@ -7,24 +7,25 @@ from datetime import datetime
 class PayrollSystem:
     def __init__(self, root):
         self.root = root
-        self.root.title("Sistema de Folha de Pagamento")
+        self.root.title("Sistema de Pagamento Fuzuê")
         self.file_path = "folha_pagamento.xlsx"
         
-        # Valores fictícios das diárias (altere aqui quando tiver os valores reais)
+        # Valores das diárias (ALTERE AQUI OS VALORES QUANDO NECESSÁRIO)
         self.daily_rates = {
-            'gerente': 160,
+            'gerente': 175,
+            'subgerente': 160,
             'atendente': 120,
-            'cozinha': 100,  # Valor fictício
+            'cozinha': 100,
             'bar': 200,
-            'churrasqueiro': 150,  # Valor fictício
-            'seguranca': 130  # Valor fictício
+            'churrasqueiro': 150,
+            'seguranca': 130
         }
         
-        # Funcionários fixos e seus cargos
+        # Funcionários fixos
         self.fixed_employees = {
             'grace': 'atendente',
             'cleria': 'gerente',
-            'lucas': 'gerente',
+            'lucas': 'subgerente',
             'emerson': 'atendente',
             'livia': 'atendente',
             'eli': 'atendente',
@@ -34,131 +35,200 @@ class PayrollSystem:
             'anchieta': 'churrasqueiro'
         }
         
-        # Criar DataFrame vazio ou carregar arquivo existente
-        self.columns = ['Data', 'Nome', 'Cargo', 'Dias Trabalhados', 'Adicional', 'Motivo Adicional', 'Valor a Receber']
+        # Configuração inicial
+        self.columns = ['Data', 'Nome', 'Cargo', 'Dias', 'Adicional', 'Motivo', 'Adiantamento', 'Total Bruto', 'Total Líquido']
+        self.load_or_create_data()
+        self.create_interface()
+
+    def load_or_create_data(self):
         if os.path.exists(self.file_path):
             self.df = pd.read_excel(self.file_path)
         else:
             self.df = pd.DataFrame(columns=self.columns)
+
+    def create_interface(self):
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
         
-        # Widgets da interface
-        self.create_widgets()
-        self.update_listbox()
+        # Aba de Lançamentos
+        self.create_main_tab()
+        
+        # Aba de Histórico
+        self.create_history_tab()
 
-    def create_widgets(self):
-        # Frame principal
-        main_frame = ttk.Frame(self.root, padding=10)
-        main_frame.grid(row=0, column=0, sticky='nsew')
-
-        # Entradas de dados
-        ttk.Label(main_frame, text="Nome:").grid(row=0, column=0, sticky='w')
-        self.name_entry = ttk.Entry(main_frame, width=25)
-        self.name_entry.grid(row=0, column=1, padx=5, pady=2)
-
-        ttk.Label(main_frame, text="Cargo:").grid(row=1, column=0, sticky='w')
-        self.role_entry = ttk.Combobox(main_frame, values=list(self.daily_rates.keys()), width=22)
-        self.role_entry.grid(row=1, column=1, padx=5, pady=2)
-
-        ttk.Label(main_frame, text="Dias Trabalhados:").grid(row=2, column=0, sticky='w')
-        self.days_entry = ttk.Entry(main_frame, width=25)
-        self.days_entry.grid(row=2, column=1, padx=5, pady=2)
-
-        ttk.Label(main_frame, text="Adicional (R$):").grid(row=3, column=0, sticky='w')
-        self.additional_entry = ttk.Entry(main_frame, width=25)
-        self.additional_entry.grid(row=3, column=1, padx=5, pady=2)
-
-        ttk.Label(main_frame, text="Motivo Adicional:").grid(row=4, column=0, sticky='w')
-        self.additional_reason_entry = ttk.Entry(main_frame, width=25)
-        self.additional_reason_entry.grid(row=4, column=1, padx=5, pady=2)
+    def create_main_tab(self):
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Lançamentos")
+        
+        # Campos de entrada
+        fields = [
+            ('Nome:', 'name_entry'),
+            ('Cargo:', 'role_combobox', list(self.daily_rates.keys())),
+            ('Dias Trabalhados:', 'days_entry'),
+            ('Adicional:', 'additional_entry'),
+            ('Motivo Adicional:', 'reason_entry'),
+            ('Adiantamento:', 'advance_entry')
+        ]
+        
+        for i, field in enumerate(fields):
+            label = field[0]
+            ttk.Label(frame, text=label).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            if len(field) == 3:  # Combobox
+                setattr(self, field[1], ttk.Combobox(frame, values=field[2], width=22))
+            else:  # Entry
+                setattr(self, field[1], ttk.Entry(frame, width=25))
+            getattr(self, field[1]).grid(row=i, column=1, padx=5, pady=2)
 
         # Botões
-        buttons_frame = ttk.Frame(main_frame)
-        buttons_frame.grid(row=5, column=0, columnspan=2, pady=10)
-
-        ttk.Button(buttons_frame, text="Adicionar", command=self.add_entry).pack(side=tk.LEFT, padx=5)
-        ttk.Button(buttons_frame, text="Editar", command=self.edit_entry).pack(side=tk.LEFT, padx=5)
-        ttk.Button(buttons_frame, text="Deletar", command=self.delete_entry).pack(side=tk.LEFT, padx=5)
-        ttk.Button(buttons_frame, text="Salvar no Excel", command=self.save_to_excel).pack(side=tk.LEFT, padx=5)
+        buttons = [
+            ('Adicionar', self.add_entry),
+            ('Editar', self.edit_entry),
+            ('Deletar', self.delete_entry),
+            ('Salvar Excel', self.save_to_excel)
+        ]
+        
+        for i, (text, command) in enumerate(buttons):
+            ttk.Button(frame, text=text, command=command).grid(row=6, column=i, padx=5, pady=10)
 
         # Lista de registros
-        self.listbox = tk.Listbox(main_frame, width=70, height=10)
-        self.listbox.grid(row=6, column=0, columnspan=2, pady=10)
+        self.listbox = tk.Listbox(frame, width=90, height=12)
+        self.listbox.grid(row=7, column=0, columnspan=4, pady=10)
         self.listbox.bind('<<ListboxSelect>>', self.select_entry)
+        
+        # Totais
+        self.total_label = ttk.Label(frame, text="Total Líquido: R$0.00 | Total Adiantamentos: R$0.00", font=('Arial', 10, 'bold'))
+        self.total_label.grid(row=8, column=0, columnspan=4)
 
-        # Total a ser pago
-        self.total_label = ttk.Label(main_frame, text="Total a ser pago: R$0.00", font=('Arial', 10, 'bold'))
-        self.total_label.grid(row=7, column=0, columnspan=2, pady=5)
+        self.update_display()
 
-    def calculate_payment(self, role, days, additional):
-        base_payment = self.daily_rates[role] * days
-        # Adicional a ser adicionado ao valor base de pagamento
-        additional_payment = additional 
-        return base_payment + additional_payment
+    def create_history_tab(self):
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Histórico")
+        
+        # Lista de datas
+        ttk.Label(frame, text="Selecione a data:").grid(row=0, column=0, sticky='w', padx=5, pady=2)
+        self.date_listbox = tk.Listbox(frame, width=20, height=10)
+        self.date_listbox.grid(row=1, column=0, padx=5, pady=5)
+        self.date_listbox.bind('<<ListboxSelect>>', self.show_history)
+
+        # Detalhes do histórico
+        self.history_text = tk.Text(frame, width=50, height=10, state='disabled')
+        self.history_text.grid(row=1, column=1, padx=5, pady=5)
+
+        # Atualizar lista de datas
+        self.update_date_list()
+
+    def update_date_list(self):
+        self.date_listbox.delete(0, tk.END)
+        unique_dates = self.df['Data'].unique()
+        for date in sorted(unique_dates):
+            self.date_listbox.insert(tk.END, date)
+
+    def show_history(self, event):
+        selected = self.date_listbox.curselection()
+        if selected:
+            date = self.date_listbox.get(selected[0])
+            history_df = self.df[self.df['Data'] == date]
+            
+            self.history_text.config(state='normal')
+            self.history_text.delete(1.0, tk.END)
+            self.history_text.insert(tk.END, f"Histórico para {date}:\n\n")
+            self.history_text.insert(tk.END, history_df.to_string(index=False))
+            self.history_text.config(state='disabled')
+
+    def calculate_payment(self, role, days, additional, advance):
+        bruto = (self.daily_rates[role] * days) + (additional * 1.1)
+        liquido = bruto - advance
+        return bruto, max(liquido, 0)
+
+    def update_display(self):
+        self.listbox.delete(0, tk.END)
+        for _, row in self.df.iterrows():
+            display_text = (f"{row['Data']} | {row['Nome']} | {row['Cargo']} | "
+                            f"{row['Dias']} dias | R${row['Total Líquido']:.2f}")
+            self.listbox.insert(tk.END, display_text)
+        
+        total_bruto = self.df['Total Bruto'].sum()
+        total_adiantamento = self.df['Adiantamento'].sum()
+        self.total_label.config(text=f"Total Bruto: R${total_bruto:.2f} | Total Líquido: R${total_bruto - total_adiantamento:.2f} | Adiantamentos: R${total_adiantamento:.2f}")
 
     def add_entry(self):
-        if self.validate_entries():
-            name = self.name_entry.get().lower()
-            role = self.role_entry.get()
-            days = int(self.days_entry.get())
-            additional = float(self.additional_entry.get())
-            additional_reason = self.additional_reason_entry.get()
-            current_date = datetime.now().strftime("%d/%m/%Y")
+        try:
+            name = self.name_entry.get().strip().lower()
+            role = self.role_combobox.get().strip().lower()
+            days = int(self.days_entry.get().strip())
+            additional = float(self.additional_entry.get().strip())
+            reason = self.reason_entry.get().strip()
+            advance = float(self.advance_entry.get().strip())
             
-            # Verifica se é funcionário fixo e ajusta o cargo se necessário
+            if not name or not role or not reason:
+                raise ValueError("Preencha todos os campos obrigatórios.")
+            
             if name in self.fixed_employees:
                 role = self.fixed_employees[name]
             
-            payment = self.calculate_payment(role, days, additional)
+            bruto, liquido = self.calculate_payment(role, days, additional, advance)
+            current_date = datetime.now().strftime("%d/%m/%Y")
             
-            new_entry = {
+            new_entry = pd.DataFrame([{
                 'Data': current_date,
                 'Nome': name.title(),
                 'Cargo': role,
-                'Dias Trabalhados': days,
+                'Dias': days,
                 'Adicional': additional,
-                'Motivo Adicional': additional_reason,
-                'Valor a Receber': round(payment, 2)
-            }
-            self.df = pd.concat([self.df, pd.DataFrame([new_entry])], ignore_index=True)
-            self.update_listbox()
+                'Motivo': reason,
+                'Adiantamento': advance,
+                'Total Bruto': bruto,
+                'Total Líquido': liquido
+            }], columns=self.columns)
+            
+            self.df = pd.concat([self.df, new_entry], ignore_index=True)
+            self.update_display()
             self.clear_entries()
-            self.update_total()
+            self.update_date_list()
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao adicionar registro: {str(e)}")
 
     def edit_entry(self):
         selected = self.listbox.curselection()
-        if selected and self.validate_entries():
-            index = selected[0]
-            name = self.name_entry.get().lower()
-            role = self.role_entry.get()
-            days = int(self.days_entry.get())
-            additional = float(self.additional_entry.get())
-            additional_reason = self.additional_reason_entry.get()
-            current_date = datetime.now().strftime("%d/%m/%Y")
-            
-            if name in self.fixed_employees:
-                role = self.fixed_employees[name]
-            
-            payment = self.calculate_payment(role, days, additional)
-            
-            self.df.at[index, 'Data'] = current_date
-            self.df.at[index, 'Nome'] = name.title()
-            self.df.at[index, 'Cargo'] = role
-            self.df.at[index, 'Dias Trabalhados'] = days
-            self.df.at[index, 'Adicional'] = additional
-            self.df.at[index, 'Motivo Adicional'] = additional_reason
-            self.df.at[index, 'Valor a Receber'] = round(payment, 2)
-            self.update_listbox()
-            self.clear_entries()
-            self.update_total()
+        if selected:
+            try:
+                index = selected[0]
+                name = self.name_entry.get().strip().lower()
+                role = self.role_combobox.get().strip().lower()
+                days = int(self.days_entry.get().strip())
+                additional = float(self.additional_entry.get().strip())
+                reason = self.reason_entry.get().strip()
+                advance = float(self.advance_entry.get().strip())
+                
+                if name in self.fixed_employees:
+                    role = self.fixed_employees[name]
+                
+                bruto, liquido = self.calculate_payment(role, days, additional, advance)
+                
+                self.df.at[index, 'Nome'] = name.title()
+                self.df.at[index, 'Cargo'] = role
+                self.df.at[index, 'Dias'] = days
+                self.df.at[index, 'Adicional'] = additional
+                self.df.at[index, 'Motivo'] = reason
+                self.df.at[index, 'Adiantamento'] = advance
+                self.df.at[index, 'Total Bruto'] = bruto
+                self.df.at[index, 'Total Líquido'] = liquido
+                
+                self.update_display()
+                self.clear_entries()
+                self.update_date_list()
+            except Exception as e:
+                messagebox.showerror("Erro", f"Erro ao editar registro: {str(e)}")
 
     def delete_entry(self):
         selected = self.listbox.curselection()
         if selected:
             index = selected[0]
             self.df = self.df.drop(index).reset_index(drop=True)
-            self.update_listbox()
+            self.update_display()
             self.clear_entries()
-            self.update_total()
+            self.update_date_list()
 
     def save_to_excel(self):
         try:
@@ -167,19 +237,13 @@ class PayrollSystem:
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao salvar dados: {str(e)}")
 
-    def validate_entries(self):
-        try:
-            int(self.days_entry.get())
-            float(self.additional_entry.get())
-            return True
-        except ValueError:
-            messagebox.showerror("Erro", "Verifique os valores numéricos!")
-            return False
-
-    def update_listbox(self):
-        self.listbox.delete(0, tk.END)
-        for _, row in self.df.iterrows():
-            self.listbox.insert(tk.END, f"{row['Data']} | {row['Nome']} | {row['Cargo']} | {row['Dias Trabalhados']} dias | R${row['Valor a Receber']}")
+    def clear_entries(self):
+        self.name_entry.delete(0, tk.END)
+        self.role_combobox.set('')
+        self.days_entry.delete(0, tk.END)
+        self.additional_entry.delete(0, tk.END)
+        self.reason_entry.delete(0, tk.END)
+        self.advance_entry.delete(0, tk.END)
 
     def select_entry(self, event):
         selected = self.listbox.curselection()
@@ -188,26 +252,44 @@ class PayrollSystem:
             data = self.df.iloc[index]
             self.name_entry.delete(0, tk.END)
             self.name_entry.insert(0, data['Nome'])
-            self.role_entry.set(data['Cargo'])
+            self.role_combobox.set(data['Cargo'])
             self.days_entry.delete(0, tk.END)
-            self.days_entry.insert(0, str(data['Dias Trabalhados']))
+            self.days_entry.insert(0, str(data['Dias']))
             self.additional_entry.delete(0, tk.END)
-            self.additional_entry.insert(0, str(data['Adicional (R$)']))
-            self.additional_reason_entry.delete(0, tk.END)
-            self.additional_reason_entry.insert(0, data['Motivo Adicional'])
-
-    def clear_entries(self):
-        self.name_entry.delete(0, tk.END)
-        self.role_entry.set('')
-        self.days_entry.delete(0, tk.END)
-        self.additional_entry.delete(0, tk.END)
-        self.additional_reason_entry.delete(0, tk.END)
-
-    def update_total(self):
-        total = self.df['Valor a Receber'].sum()
-        self.total_label.config(text=f"Total a ser pago: R${total:.2f}")
+            self.additional_entry.insert(0, str(data['Adicional']))
+            self.reason_entry.delete(0, tk.END)
+            self.reason_entry.insert(0, data['Motivo'])
+            self.advance_entry.delete(0, tk.END)
+            self.advance_entry.insert(0, str(data['Adiantamento']))
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = PayrollSystem(root)
+    
+    # Manual do Sistema
+    manual = """=== MANUAL DO SISTEMA FUZUÊ ===
+
+1. CADASTRO DE FUNCIONÁRIOS:
+- Preencha todos os campos obrigatórios
+- Funcionários fixos têm cargo automático
+- Use valores decimais para adiantamentos
+
+2. CÁLCULOS AUTOMÁTICOS:
+- Valores calculados com base na diária do cargo
+- Adicionais têm 10% de bonificação
+- Adiantamentos são deduzidos do total
+
+3. HISTÓRICO COMPLETO:
+- Acesse todas as folhas por data
+- Visualize detalhes completos
+- Exporte para Excel a qualquer momento
+
+4. EDIÇÃO SEGURA:
+- Clique em um registro para editar
+- Atualizações refletem imediatamente
+- Histórico permanente e seguro
+
+Dúvidas? Contate o desenvolvedor!"""
+    
+    messagebox.showinfo("Manual do Sistema", manual)
     root.mainloop()
