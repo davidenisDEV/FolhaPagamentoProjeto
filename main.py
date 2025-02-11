@@ -3,6 +3,8 @@ from tkinter import ttk, messagebox
 import pandas as pd
 import os
 from datetime import datetime
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class PayrollSystem:
     def __init__(self, root):
@@ -10,7 +12,7 @@ class PayrollSystem:
         self.root.title("Sistema de Pagamento Fuzuê")
         self.file_path = "folha_pagamento.xlsx"
         
-        # Valores das diárias (ALTERE AQUI OS VALORES QUANDO NECESSÁRIO)
+        # Valores das diárias
         self.daily_rates = {
             'gerente': 175,
             'subgerente': 160,
@@ -40,12 +42,31 @@ class PayrollSystem:
         self.load_or_create_data()
         self.create_interface()
 
-    def load_or_create_data(self):
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+    
+    def load_data(self):
         if os.path.exists(self.file_path):
             self.df = pd.read_excel(self.file_path)
         else:
             self.df = pd.DataFrame(columns=self.columns)
 
+    def save_data(self):
+        try:
+            self.df.to_excel(self.file_path, index=False)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao salvar dados: {str(e)}")
+
+    def on_close(self):
+        self.save_data()
+        self.root.destroy()
+    
+    def load_or_create_data(self):
+        if os.path.exists(self.file_path):
+            self.df = pd.read_excel(self.file_path)
+        else:
+            self.df = pd.DataFrame(columns=self.columns)
+            
+    # Criar interface
     def create_interface(self):
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True)
@@ -55,6 +76,12 @@ class PayrollSystem:
         
         # Aba de Histórico
         self.create_history_tab()
+        
+        # Aba de Gestão de Funcionários
+        self.create_employee_tab()
+        
+        # Aba de Relatórios Financeiros
+        self.create_reports_tab()
 
     def create_main_tab(self):
         frame = ttk.Frame(self.notebook)
@@ -117,6 +144,72 @@ class PayrollSystem:
 
         # Atualizar lista de datas
         self.update_date_list()
+    
+    def create_employee_tab(self):
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Gestão de Funcionários")
+        
+        # Filtro por nome
+        ttk.Label(frame, text="Nome do Funcionário:").grid(row=0, column=0, padx=5, pady=5)
+        self.employee_name_entry = ttk.Entry(frame, width=30)
+        self.employee_name_entry.grid(row=0, column=1, padx=5, pady=5)
+        ttk.Button(frame, text="Buscar", command=self.show_employee_data).grid(row=0, column=2, padx=5, pady=5)
+        
+        # Histórico de pagamentos
+        self.employee_history_text = tk.Text(frame, width=80, height=15, state='disabled')
+        self.employee_history_text.grid(row=1, column=0, columnspan=3, padx=5, pady=5)
+
+    def show_employee_data(self):
+        name = self.employee_name_entry.get().strip().title()
+        if not name:
+            messagebox.showwarning("Aviso", "Digite o nome do funcionário.")
+            return
+        
+        employee_data = self.df[self.df['Nome'] == name]
+        if employee_data.empty:
+            messagebox.showinfo("Info", f"Nenhum registro encontrado para {name}.")
+            return
+        
+        self.employee_history_text.config(state='normal')
+        self.employee_history_text.delete(1.0, tk.END)
+        self.employee_history_text.insert(tk.END, f"Histórico de Pagamentos para {name}:\n\n")
+        self.employee_history_text.insert(tk.END, employee_data.to_string(index=False))
+        self.employee_history_text.config(state='disabled')
+
+    def create_reports_tab(self):
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Relatórios Financeiros")
+        
+        # Filtros
+        ttk.Label(frame, text="Período:").grid(row=0, column=0, padx=5, pady=5)
+        self.report_period_combobox = ttk.Combobox(frame, values=["Semanal", "Mensal"], width=15)
+        self.report_period_combobox.grid(row=0, column=1, padx=5, pady=5)
+        self.report_period_combobox.set("Mensal")
+        ttk.Button(frame, text="Gerar Relatório", command=self.generate_report).grid(row=0, column=2, padx=5, pady=5)
+        
+        # Gráfico
+        self.figure, self.ax = plt.subplots(figsize=(6, 4))
+        self.canvas = FigureCanvasTkAgg(self.figure, master=frame)
+        self.canvas.get_tk_widget().grid(row=1, column=0, columnspan=3, padx=5, pady=5)
+
+    def generate_report(self):
+        period = self.report_period_combobox.get()
+        if period == "Mensal":
+            self.df['Data'] = pd.to_datetime(self.df['Data'], format='%d/%m/%Y')
+            report_data = self.df.groupby(self.df['Data'].dt.to_period('M')).sum(numeric_only=True)
+            report_data.index = report_data.index.strftime('%Y-%m')
+        else:
+            self.df['Data'] = pd.to_datetime(self.df['Data'], format='%d/%m/%Y')
+            report_data = self.df.groupby(self.df['Data'].dt.to_period('W')).sum(numeric_only=True)
+            report_data.index = report_data.index.strftime('%Y-%U')
+        
+        # Atualizar gráfico
+        self.ax.clear()
+        report_data['Total Bruto'].plot(kind='bar', ax=self.ax, color='skyblue')
+        self.ax.set_title(f"Total de Pagamentos ({period})")
+        self.ax.set_xlabel("Período")
+        self.ax.set_ylabel("Valor (R$)")
+        self.canvas.draw()
 
     def update_date_list(self):
         self.date_listbox.delete(0, tk.END)
