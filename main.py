@@ -16,10 +16,10 @@ class PayrollSystem:
         self.daily_rates = {
             'gerente': 175,
             'subgerente': 160,
-            'atendente': 120,
-            'cozinha': 100,
-            'bar': 200,
-            'churrasqueiro': 150,
+            'atendente': 130,
+            'cozinha': 130,
+            'bar': 130,
+            'churrasqueiro': 130,
             'seguranca': 130
         }
         
